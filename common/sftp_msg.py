@@ -19,9 +19,7 @@ class pkg_type(IntEnum):
 
 # 控制消息
 class sftp_msg(object):
-    def __init__(self, ptype: pkg_type, ack: int, msg: str = "", bytes_data=None):
-        if bytes_data:
-            self.ptype, self.ack, self.length, self.msg = sftp_msg.unpack(pkg_msg)
+    def __init__(self, ptype: pkg_type, ack: int, msg: str = ""):
         self.ptype = ptype
         self.ack = ack
         self.msg = msg.encode()
@@ -29,8 +27,12 @@ class sftp_msg(object):
         self.length = len(msg)
 
     def pack(self):
-        # 数据包打包
-        return struct.pack('BBH{len}s'.format(len=self.length),
+        """
+        数据包打包
+        :return: 打包后的字节流
+        :raise: struct.error msg长度超过 65535 时抛出
+        """
+        return struct.pack('=BBH{len}s'.format(len=self.length),
                            self.ptype, self.ack, self.length, self.msg)
 
     def __str__(self):
@@ -45,13 +47,13 @@ class sftp_msg(object):
     def unpack(sftp_msg_pkg: bytes):
         # 数据包解包
         length = struct.unpack('H', sftp_msg_pkg[2:4])[0]
-        return struct.unpack('@BB2s{len}s'.format(len=length), sftp_msg_pkg)
+        return struct.unpack('=BBH{len}s'.format(len=length), sftp_msg_pkg)
 # 文件数据
 
 
 if __name__ == '__main__':
     # msg = sftp_msg(pkg_type.FILE_UPLD, 6, "helloworld")
-    msg = sftp_msg(pkg_type.SignUp, 1)
+    msg = sftp_msg(pkg_type.SignUp, 1, "8"*2)
     pkg_msg = msg.pack()
     print(pkg_msg)
     ptype, ack, length, msg = sftp_msg.unpack(pkg_msg)

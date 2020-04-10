@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 import socket
 import ssl
-# from transitions.extensions.factory import HierarchicalGraphMachine as Machine
-from transitions.extensions import HierarchicalMachine as Machine
-from transitions.extensions.nesting import NestedState
+from transitions.extensions.factory import HierarchicalGraphMachine as Machine
+# from transitions.extensions import HierarchicalMachine as Machine
+# from transitions.extensions.nesting import NestedState
 from common.settings import *
 from common.utils import *
 from common.sftp_msg import *
@@ -16,9 +16,9 @@ import json
 
 class STFP_Client(Machine):
     def __init__(self, server_uri: tuple = None, ssl_mode=False, cert_path=CERT_PATH):
-        Machine.__init__(self, states=STATES, initial="INIT", **extra_args)
+        Machine.__init__(self, states=STATES, transitions=TRANSITIONS, initial="INIT", **extra_args)
         self.__machine_init()  # 配置状态机
-        return
+        self.token = None
         # socket初始化
         self.raw_sock = socket.create_connection(server_uri)
         self.work_sock = None
@@ -35,61 +35,15 @@ class STFP_Client(Machine):
         """
         状态机初始化
         主要工作：
-        1. 添加 transitions
-        2. 输出模型
+        1. 添加 transitions(可选，初始化时已完成)
+        2. 设置输出图形参数
+        3. 输出模型 (需要关闭 parallel 或 取消 自定义分隔符)
         """
-        self.add_transitions([
-            {   # 注册
-                'source': "INIT", 'dest': "SignUpSuccess",
-                'trigger': 'Try to SignUp',
-                'conditions': 'reqSignUp'
-            },
-            {   # 回滚到Init
-                'source': ["SignUpSuccess", "Running"], 'dest': "INIT",
-                'trigger': 'Go Back'
-            },
-            {   # 登录
-                'source': "INIT", 'dest': "Running",
-                'trigger': 'Try to SignIn',
-                'conditions': "reqSignIn"
-            },
-        ])
+        # self.add_transitions()
         # 图像设置
         # self.style_attributes['edge']["default"]["fontname"] = "Microsoft YaHei"
-        # self.get_graph().draw('SFTP_Machine.pdf', prog='dot')   # 输出当前状态机模型
-
-    def reqSignUp(self):
-        """
-        请求注册逻辑实现
-        状态转换：Init ↦ SignUpSuccess (if return True)
-        """
-        # 获取用户输入
-        usr_name = input('>>>username:')
-        passwd = getpass.getpass('>>>password:')
-        # print(usr_name, passwd)
-
-        # 组装SignUp数据包
-        signUpMsg = json.dumps({
-            "username": usr_name,
-            "password": passwd
-        })
-        pkg = sftp_msg(pkg_type.SignUp, 1, signUpMsg).pack()
-        try:
-            # 发送SignUp数据包
-            nSent = self.work_sock.send(pkg)
-            print(f"发送字节数:{nSent}")
-            # 接收返回的数据包
-            ret_pkg = sftp_msg(bytes_data=self.work_sock.recv(BUFFER_SIZE))
-            assert ret_pkg.ptype == pkg_type.SignUp
-            # TODO:根据包内容返回 True or False
-            print(ret_pkg)
-
-        except ConnectionResetError as e:
-            print('服务器掉线，注册失败')
-            return False
-
-    def reqSignIn(self):
-        return True
+        self.get_graph().draw('SFTP_Machine.pdf', prog='dot')   # 输出当前状态机模型
+        pass
 
     # 控制台界面
     def work(self):
@@ -130,6 +84,107 @@ class STFP_Client(Machine):
             except ValueError:
                 print('请输入指令编号')
                 continue
+
+    def reqSignUp(self):
+        """
+        注册逻辑实现
+        状态转换：Init -> SignUpSuccess (if return True)
+        """
+        # 获取用户输入
+        usr_name = input('>>>username:')
+        passwd = getpass.getpass('>>>password:')
+        # print(usr_name, passwd)
+
+        # 组装SignUp数据包
+        signUpMsg = json.dumps({
+            "name": usr_name,
+            "pwd": passwd
+        })
+        pkg = sftp_msg(pkg_type.SignUp, 0, signUpMsg).pack()
+
+        try:
+            # 发送SignUp数据包
+            nSent = self.work_sock.send(pkg)
+            print(f"发送字节数:{nSent}")
+            ret_pkg = self.work_sock.recv(BUFFER_SIZE)  # 接收返回的数据包
+            # print(ret_pkg)
+            if ret_pkg is None:
+                print("服务器错误")
+                return False
+            ptype, ack, length, msg = sftp_msg.unpack(ret_pkg)  # 拆包
+            assert ptype == pkg_type.SignUp
+            print(msg)
+            return True if ack is 1 else False
+
+        except ConnectionResetError as e:
+            print('服务器掉线，注册失败')
+            return False
+
+    def reqSignIn(self):
+        """
+        登录逻辑实现
+        状态转换：Init -> Running (if return True)
+        """
+        usr_name = input('>>>username:')
+        passwd = getpass.getpass('>>>password:')
+        signInMsg = json.dumps({
+            "name": usr_name,
+            "pwd": passwd
+        })
+        pkg = sftp_msg(pkg_type.SignIn, 0, signInMsg).pack()
+        try:
+            # 发送SignIn数据包
+            nSent = self.work_sock.send(pkg)
+            print(f"发送字节数:{nSent}")
+            ret_pkg = self.work_sock.recv(BUFFER_SIZE)  # 接收返回的数据包
+            # print(ret_pkg)
+            if ret_pkg is None:
+                print("服务器错误")
+                return False
+            ptype, ack, length, msg = sftp_msg.unpack(ret_pkg)  # 拆包
+            # assert ptype == pkg_type.SignIn
+            msg = json.loads(msg)
+            print(msg)
+            if ack is 1:
+                self.token = msg['token']
+                return True
+            else:
+                return False
+
+        except ConnectionResetError as e:
+            print('服务器掉线，登录失败')
+            return False
+
+    def on_enter_Running(self):
+        print("token:", self.token)
+
+    def reqRemoteDir(self):
+        """
+        显示远程目录
+        内部状态转换：Running↦LS_MODE
+        """
+        pass
+
+    def reqLocalDir(self):
+        """
+        显示本地目录
+        内部状态转换：Running↦LS_MODE
+        """
+        pass
+
+    def reqUploadFile(self):
+        """
+        上传文件
+        内部状态转换：Running↦UP_MODE
+        """
+        pass
+
+    def reqDownloadFile(self):
+        """
+        下载文件
+        内部状态转换：Running↦DOWN_MODE
+        """
+        pass
 
 
 if __name__ == '__main__':

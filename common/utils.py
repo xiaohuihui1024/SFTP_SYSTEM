@@ -48,11 +48,57 @@ def list_sub(list1: list, list2: list):
 
 STATES = ["INIT",
           "SignUpSuccess",
-          {'name': "Running",
-           'parallel': ["LS_MODE", "UP_MODE", "DOWN_MODE"],
-           #'children': ["LS_MODE", "UP_MODE", "DOWN_MODE"],
-           #'initial': "LS_MODE"
+          {
+              'name': "Running",
+              # 'parallel': ["LS_MODE", "UP_MODE", "DOWN_MODE"],
+              'children': ["LS_MODE", "UP_MODE", "DOWN_MODE"],
+              'initial': "LS_MODE",
            }]
+
+
+TRANSITIONS = [
+    {   # 注册
+        'source': "INIT", 'dest': "SignUpSuccess",
+        'trigger': 'Try to SignUp',
+        'conditions': 'reqSignUp'
+    },
+    {   # 回滚到Init
+        'source': ["SignUpSuccess", "Running"], 'dest': "INIT",
+        'trigger': 'Go Back'
+    },
+    {   # 登录
+        'source': "INIT", 'dest': "Running",
+        'trigger': 'Try to SignIn',
+        'conditions': "reqSignIn"
+    },
+    {    # 显示云端目录
+       'source': 'Running↦LS_MODE', 'dest': None,
+       'trigger': "Show Romete Directory",
+       'conditions': 'reqRemoteDir'
+    },
+    {   # 显示本地目录
+       'source': 'Running↦LS_MODE', 'dest': None,
+       'trigger': "Show Local Directory",
+       'conditions': 'reqLocalDir'
+    },
+    {   # 上传文件
+       'source': 'Running↦UP_MODE', 'dest': None,
+       'trigger': "Upload files",
+       'conditions': 'reqUploadFile'
+    },
+    {   # 下载文件
+       'source': 'Running↦DOWN_MODE', 'dest': None,
+       'trigger': "Download files",
+       'conditions': 'reqDownloadFile'
+    }
+]
+
+from functools import update_wrapper
+from types import MappingProxyType
+from typing import Hashable, Callable, Union
+
+
+
 
 if __name__ == '__main__':
     print(STATES)
