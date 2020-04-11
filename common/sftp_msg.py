@@ -15,6 +15,7 @@ class pkg_type(IntEnum):
     FILE_DOWNLD = 4
     FILE_UPLD = 5
     SHOW_LIST = 6
+    SERVER_ERROR = 7
 
 
 # 控制消息

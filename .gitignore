@@ -1,5 +1,9 @@
 .idea
+__pycache__
 */__pycache__
+/workspace.xml
 *.pdf
 *.key
 server_press_test.py
+MY_FILES
+USER_FILES

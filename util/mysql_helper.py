@@ -73,7 +73,7 @@ class MySQLHelper(object):
             # 回滚
             self.db.rollback()
 
-    def query(self, table,  column_names: list = None, cond=None):
+    def query(self, table,  column_names: list = None, cond=None) -> tuple:
         """
         查询数据
         :param table: 表名

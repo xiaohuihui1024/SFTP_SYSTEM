@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # from enum import Enum, unique, auto
 # from transitions.core import Enum
+from transitions.extensions.nesting import NestedState
 
 
 def print_msg(title, options, extra=None):
@@ -48,10 +49,15 @@ def list_sub(list1: list, list2: list):
 
 STATES = ["INIT",
           "SignUpSuccess",
+          "EXIT",
           {
               'name': "Running",
-              # 'parallel': ["LS_MODE", "UP_MODE", "DOWN_MODE"],
-              'children': ["LS_MODE", "UP_MODE", "DOWN_MODE"],
+              # 'parallel': ["LS_MODE", "UP_MODE", "DOWN_MODE"], # children
+              'parallel': ["LS_MODE", "DOWN_MODE",
+                           {
+                               "name": "UP_MODE", "children": ["OverRide", "Normal",
+                                                               NestedState("UPLOADING", on_enter="upload_file")]
+                           }],
               'initial': "LS_MODE",
            }]
 
@@ -62,14 +68,28 @@ TRANSITIONS = [
         'trigger': 'Try to SignUp',
         'conditions': 'reqSignUp'
     },
-    {   # 回滚到Init
-        'source': ["SignUpSuccess", "Running"], 'dest': "INIT",
+    {   # 注册后返回Init
+        'source': "SignUpSuccess", 'dest': "INIT",
         'trigger': 'Go Back'
     },
     {   # 登录
         'source': "INIT", 'dest': "Running",
         'trigger': 'Try to SignIn',
         'conditions': "reqSignIn"
+    },
+    {   # 重新连接服务器
+        'source': "INIT", 'dest': None,
+        'trigger': 'ReConnect to the server',
+        'prepare': "ReConnect"
+    },
+    {   # 退出程序
+        'source': "INIT", 'dest': "EXIT",
+        'trigger': "Exit"
+    },
+    {   # 退出登录
+        'source': "Running", 'dest': "INIT",
+        'trigger': 'Try to SignOut',
+        "prepare": "reqSignOut"
     },
     {    # 显示云端目录
        'source': 'Running↦LS_MODE', 'dest': None,
@@ -81,23 +101,12 @@ TRANSITIONS = [
        'trigger': "Show Local Directory",
        'conditions': 'reqLocalDir'
     },
-    {   # 上传文件
-       'source': 'Running↦UP_MODE', 'dest': None,
-       'trigger': "Upload files",
-       'conditions': 'reqUploadFile'
-    },
     {   # 下载文件
        'source': 'Running↦DOWN_MODE', 'dest': None,
-       'trigger': "Download files",
+       'trigger': "Download file",
        'conditions': 'reqDownloadFile'
     }
 ]
-
-from functools import update_wrapper
-from types import MappingProxyType
-from typing import Hashable, Callable, Union
-
-
 
 
 if __name__ == '__main__':
