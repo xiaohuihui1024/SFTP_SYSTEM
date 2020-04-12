@@ -260,10 +260,10 @@ def _(case, data: dict, handler_obj=None):
             (2) 每次实际接收的数据长度未知; 
             (3) 因此需要提前预知数据大小，判断接收完成
             """
-            file_bytes = handler_obj.data_client_sock.recv(handler_obj.cur_file_info[1])
+            file_bytes = handler_obj.data_client_sock.recv(FILE_BUFFER_SIZE)
             f.write(file_bytes)  # 将 recv 收到的数据写入文件
             cur_size = f.tell()  # 当前文件指针位置, 即当前成功接收了多少字节数据
-            print(f"{cur_size}/{handler_obj.cur_file_info[1]} ====> {cur_size/handler_obj.cur_file_info[1]*100}%")
+            # print(f"{cur_size}/{handler_obj.cur_file_info[1]} ====> {cur_size/handler_obj.cur_file_info[1]*100}%")
         # 文件接收完毕
         f.close()
     # 重置相关变量

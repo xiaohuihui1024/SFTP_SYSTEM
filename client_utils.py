@@ -52,11 +52,16 @@ STATES = ["INIT",
           "EXIT",
           {
               'name': "Running",
-              # 'parallel': ["LS_MODE", "UP_MODE", "DOWN_MODE"], # children
-              'parallel': ["LS_MODE", "DOWN_MODE",
+              # 'parallel': ["LS_MODE", "UP_MODE", "DOWN_MODE"], # children DOWNLOADing
+              'parallel': ["LS_MODE",
                            {
-                               "name": "UP_MODE", "children": ["OverRide", "Normal",
-                                                               NestedState("UPLOADING", on_enter="upload_file")]
+                               "name": "DOWN_MODE",
+                               "children": [NestedState("DOWNLOADing", on_enter="download_file", on_exit="DownDone")]
+                           },
+                           {
+                               "name": "UP_MODE",
+                               "children": ["OverRide", "Normal",
+                                            NestedState("UPLOADING", on_enter="upload_file", on_exit="UpDone")]
                            }],
               'initial': "LS_MODE",
            }]
@@ -100,11 +105,6 @@ TRANSITIONS = [
        'source': 'Running↦LS_MODE', 'dest': None,
        'trigger': "Show Local Directory",
        'conditions': 'reqLocalDir'
-    },
-    {   # 下载文件
-       'source': 'Running↦DOWN_MODE', 'dest': None,
-       'trigger': "Download file",
-       'conditions': 'reqDownloadFile'
     }
 ]
 

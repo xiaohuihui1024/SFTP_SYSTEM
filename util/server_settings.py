@@ -5,3 +5,4 @@ CERT_PATH = 'common/server.crt'
 KEY_PATH = 'server.key'
 SERVER_URI = (SERVER_HOST, SERVER_PORT)
 FILE_DIR = "./USER_FILES/"
+FILE_BUFFER_SIZE = 8192
