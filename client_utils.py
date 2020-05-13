@@ -3,6 +3,7 @@
 # from enum import Enum, unique, auto
 # from transitions.core import Enum
 from transitions.extensions.nesting import NestedState
+from common.settings import LOCAL_DIR
 
 
 def print_msg(title, options, extra=None):
@@ -56,7 +57,8 @@ STATES = ["INIT",
               'parallel': ["LS_MODE",
                            {
                                "name": "DOWN_MODE",
-                               "children": [NestedState("DOWNLOADing", on_enter="download_file", on_exit="DownDone")]
+                               "children": ["reqDown",
+                                            NestedState("DOWNLOADing", on_enter="download_file", on_exit="DownDone")]
                            },
                            {
                                "name": "UP_MODE",
@@ -107,6 +109,12 @@ TRANSITIONS = [
        'conditions': 'reqLocalDir'
     }
 ]
+
+
+def get_local_dir():
+    if not os.path.exists(LOCAL_DIR):
+        os.mkdir(LOCAL_DIR)
+    return os.listdir(LOCAL_DIR)
 
 
 if __name__ == '__main__':

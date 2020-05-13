@@ -42,8 +42,11 @@ class STFP_Client(Machine):
             print('不使用SSL')
             self.work_sock = self.raw_sock
         # 其他参数
-        self.up_sock = None     # 上传文件专用socket
-        self.down_sock = None   # 下载文件专用socket
+        self.file_sock = None     # 传输文件专用 socket
+        # 下载文件专用监听socket
+        # self.down_listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.down_listen_sock.bind((SERVER_HOST, SERVER_DATA_PORT))
+        # self.down_conn_sock = None  # 下载文件连接socket
         self.token = None       # 用户临时口令
 
     def __machine_init(self):
@@ -80,17 +83,26 @@ class STFP_Client(Machine):
                 'source': 'Running↦UP_MODE↦UPLOADING',
                 'dest': 'Running↦UP_MODE',
                 'trigger': "FinishUpload",
-                # "before": "UpDone"
             },
             {  # 下载文件请求
-                'source': 'Running↦DOWN_MODE', 'dest': 'Running↦DOWN_MODE↦DOWNLOADing',
+                'source': 'Running↦DOWN_MODE', 'dest': 'Running↦DOWN_MODE↦reqDown',
                 'trigger': "Download file",
-                'conditions': 'reqDownloadFile'
+                'before': 'reqDownloadFile'
+            },
+            {  # 下载文件请求 失败回退
+                'source': 'Running↦DOWN_MODE↦reqDown',
+                'dest': 'Running↦DOWN_MODE',
+                'trigger': "Ret_DOWN_MODE"
+            },
+            {  # 进入下载过程
+                'source': 'Running↦DOWN_MODE↦reqDown',
+                'dest': 'Running↦DOWN_MODE↦DOWNLOADing',
+                'trigger': "Download",
+                'prepare': "preDownload"
             },
             {   # 下载完毕回退
                 'source': 'Running↦DOWN_MODE↦DOWNLOADing', 'dest': 'Running↦DOWN_MODE',
                 'trigger': "FinishDownload",
-                # 'before': 'DownDone'
             }
 
         ])
@@ -271,6 +283,19 @@ class STFP_Client(Machine):
         显示远程目录
         内部状态转换：Running↦LS_MODE
         """
+        ack, msg = self.__sendmsg(pkg_type.SHOW_LIST, 0, {"token": self.token}, recv=True)
+        msg = json.loads(msg)
+        if ack == 1:
+            print("\033[35m=\033[0m" * 23)  # 紫色分割线
+            print("\033[32mRemote File List:\033[0m")
+            for file_name in msg["result"]:
+                print(file_name)
+            print("\033[35m=\033[0m" * 23)  # 紫色分割线
+            while input("Press 'q' to return: ") is not 'q':
+                pass
+        else:
+            print("Error: ", msg)
+
         pass
 
     def reqLocalDir(self, event):
@@ -278,9 +303,7 @@ class STFP_Client(Machine):
         显示本地目录
         内部状态转换：Running↦LS_MODE
         """
-        if not os.path.exists(LOCAL_DIR):
-            os.mkdir(LOCAL_DIR)
-        file_list = os.listdir(LOCAL_DIR)
+        file_list = get_local_dir()
         if file_list:
             [print(i) for i in file_list]
         else:
@@ -301,6 +324,7 @@ class STFP_Client(Machine):
             if os.path.exists(file_path):
                 break
             elif file_path is "q":  # 放弃上传
+                self.trigger("Ret_UP_MODE")
                 return False
         assert os.path.exists(file_path)
         # 发送 文件上传请求 数据包
@@ -312,7 +336,7 @@ class STFP_Client(Machine):
         ack, msg = ret if ret else None, None
         if ack == 2:
             # 如果服务器端合适，手动触发状态转换
-            # UP_MODE --> UP_MODE↦Upload
+            # UP_MODE --> UP_MODE↦UPLOADING
             # Upload有两个回调：preUpload, upload_file
             self.Upload(file_path=file_path)
             return True
@@ -324,7 +348,7 @@ class STFP_Client(Machine):
     def preUpload(self, event):
         """
         客户端上传前预备工作：告诉服务器我要开始发送了
-        状态转换：UP_MODE --> UP_MODE↦Upload
+        状态转换：UP_MODE --> UP_MODE↦UPLOADING
         """
         self.__sendmsg(pkg_type.FILE_UPLD, 5, {"token": f"{self.token}"}, recv=False)
 
@@ -335,13 +359,13 @@ class STFP_Client(Machine):
         :param event: 一些相关参数可以从这个变量获取
         :return: 返回到 UP_MODE 状态
         """
-        if self.up_sock is None:    # 上传文件sock初始化
-            self.up_sock = socket.create_connection((SERVER_HOST, 33333))  # TODO: 更改端口号
-            self.up_sock = self.context.wrap_socket(self.up_sock, server_hostname=SERVER_HOST)
+        if self.file_sock is None:    # 上传文件sock初始化
+            self.file_sock = socket.create_connection((SERVER_HOST, 33333))  # TODO: 更改端口号
+            self.file_sock = self.context.wrap_socket(self.file_sock, server_hostname=SERVER_HOST)
         file_path = event.kwargs.get("file_path")
         with open(file_path, "rb") as f:
             # TODO: [分段发送，进度显示]
-            self.up_sock.sendall(f.read())  # 大文件可能一次传不完, 需要用sendall 或者 手动选择进度
+            self.file_sock.sendall(f.read())  # 大文件可能一次传不完, 需要用sendall 或者 手动选择进度
             f.close()
         self.FinishUpload()
 
@@ -353,9 +377,9 @@ class STFP_Client(Machine):
         # self.work_sock.send(sftp_msg(pkg_type.FILE_UPLD, 6, json.dumps({"token": f"{self.token}"})).pack())
         self.__recvmsg(pkg_type.FILE_UPLD)
         # 重置相关变量
-        self.up_sock.close()
-        del self.up_sock
-        self.up_sock = None
+        self.file_sock.close()
+        del self.file_sock
+        self.file_sock = None
 
     def reqDownloadFile(self, event):
         """
@@ -363,13 +387,48 @@ class STFP_Client(Machine):
         Running子状态转换：DOWN_MODE --> DOWN_MODE↦DOWNLOADing (if return True)
         """
         # 查询服务器有哪些文件
+        ack, msg = self.__sendmsg(pkg_type.SHOW_LIST, 0, {"token": self.token}, recv=True)
+        msg = json.loads(msg)
+        if ack == 1:
+            file_list = msg["result"]
+            if len(file_list) is 0:
+                print("No files in Remote dir")
+                self.trigger("Ret_DOWN_MODE")
+                return False
+            print_msg("You can download the following list of files:", file_list)
+            file_name = None
+            # 下载的文件是否在服务器列表
+            while file_name not in file_list:
+                file_name = input("Enter the file name you want to download: ")
+                if file_name is 'q':
+                    self.trigger("Ret_DOWN_MODE")
+                    return False
+            # 判断是否跟本地文件冲突, 并提示用户选择
+            if file_name in get_local_dir():
+                print(f"{file_name} exists in the local file")
+                choice = input("override or no? (Y/N, default Y) >>> ")
+                if choice is 'N':
+                    self.trigger("Ret_DOWN_MODE")
+                    return False
+                else:
+                    os.remove(LOCAL_DIR+file_name)
+                    print(f"{file_name} in local dir has removed")
+            # 进入下载过程
+            self.Download(file_name=file_name)
+        else:
+            print("Server error, cannot download")
+            self.trigger("Ret_DOWN_MODE")
+            return False
 
-        # 判断下载的文件是否在服务器列表
+    def preDownload(self, event):
+        if self.down_conn_sock is None:
+            self.down_listen_sock
+        pass
 
-        # 判断是否跟本地文件冲突, 并提示用户选择
+    def download_file(self, event):
+        pass
 
-        # 进入下载过程 准备
-
+    def DownDone(self, event):
         pass
 
 

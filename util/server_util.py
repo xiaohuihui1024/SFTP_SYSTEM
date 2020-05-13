@@ -236,8 +236,8 @@ def _(case, data: dict, handler_obj=None):
     接收 上传的文件
     :return:
     """
-    file_info = json.loads(data)
-    usr_name = check_token(file_info["token"])
+    usr_token = json.loads(data)
+    usr_name = check_token(usr_token["token"])
     if usr_name is None:
         # 登录状态异常
         return sftp_msg(pkg_type.FILE_UPLD, 8, json.dumps({"result": "Invalid user"})).pack()
@@ -274,6 +274,19 @@ def _(case, data: dict, handler_obj=None):
     # 发送 文件传输完毕
     return sftp_msg(pkg_type.FILE_UPLD, 7, json.dumps({"result": "accept over"})).pack()
 
+
+@deal_pkg.register((pkg_type.SHOW_LIST.value, 0))
+def _(case, data: dict, handler_obj=None):
+    usr_token = json.loads(data)
+    usr_name = check_token(usr_token["token"])
+    if usr_name is None:
+        # 登录状态异常
+        return sftp_msg(pkg_type.SHOW_LIST, 3, json.dumps({"result": "Invalid user"})).pack()
+    try:
+        usr_filelist = os.listdir(FILE_DIR+usr_name)
+        return sftp_msg(pkg_type.SHOW_LIST, 1, json.dumps({"result": usr_filelist})).pack()
+    except OSError:
+        return sftp_msg(pkg_type.SHOW_LIST, 2, json.dumps({"result": "OSError"})).pack()
 
 
 
